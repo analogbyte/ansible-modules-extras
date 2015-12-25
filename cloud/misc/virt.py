@@ -55,6 +55,13 @@ options:
       - XML document used with the define command
     required: false
     default: null
+  autostart_state:
+    description:
+      - Boolean switch which determines the action taken by the autostart
+        command. 'True' indicates a guest should autostart, 'False' the
+        opposite.
+    required: false
+    default: "True"
 requirements:
     - "python >= 2.6"
     - "libvirt-python"
@@ -308,9 +315,9 @@ class Virt(object):
     def virttype(self):
         return self.__get_conn().get_type()
 
-    def autostart(self, vmid):
+    def autostart(self, vmid, autostart_state):
         self.conn = self.__get_conn()
-        return self.conn.set_autostart(vmid, True)
+        return self.conn.set_autostart(vmid, autostart_state)
 
     def freemem(self):
         self.conn = self.__get_conn()
@@ -399,11 +406,12 @@ class Virt(object):
 
 def core(module):
 
-    state      = module.params.get('state', None)
-    guest      = module.params.get('name', None)
-    command    = module.params.get('command', None)
-    uri        = module.params.get('uri', None)
-    xml        = module.params.get('xml', None)
+    state           = module.params.get('state', None)
+    guest           = module.params.get('name', None)
+    command         = module.params.get('command', None)
+    uri             = module.params.get('uri', None)
+    xml             = module.params.get('xml', None)
+    autostart_state = module.params.get('autostart_state', None)
 
     v = Virt(uri, module)
     res = {}
@@ -456,6 +464,17 @@ def core(module):
                     v.define(xml)
                     res = {'changed': True, 'created': guest}
                 return VIRT_SUCCESS, res
+            if command == 'autostart':
+                if autostart_state is None:
+                    module.fail_json(msg = "autostart requires autostart_state argument")
+                try:
+                    previous_state = v.info()[guest]['autostart']
+                    v.autostart(guest, autostart_state)
+                    res = { 'changed': True if previous_state != autostart_state else False }
+                    return VIRT_SUCCESS, res
+                except VMNotFound:
+                    module.fail_json(msg = "no vm with this name")
+                return VIRT_SUCCESS, res
             res = getattr(v, command)(guest)
             if type(res) != dict:
                 res = { command: res }
@@ -479,6 +498,7 @@ def main():
         state = dict(choices=['running', 'shutdown', 'destroyed', 'paused']),
         command = dict(choices=ALL_COMMANDS),
         uri = dict(default='qemu:///system'),
+        autostart_state = dict(default=True, type='bool'),
         xml = dict(),
     ))
 

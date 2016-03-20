@@ -22,7 +22,12 @@ import stat
 try:
     import json
 except ImportError:
-    import simplejson as json
+    try:
+        import simplejson as json
+    except ImportError:
+        # Let snippet from module_utils/basic.py return a proper error in this case
+        pass
+
 
 DOCUMENTATION = '''
 ---
@@ -47,14 +52,6 @@ options:
       - Path to the manifest file to run puppet apply on.
     required: false
     default: None
-  show_diff:
-    description:
-      - >
-       Should puppet return diffs of changes applied. Defaults to off to
-       avoid leaking secret changes by default.
-    required: false
-    default: no
-    choices: [ "yes", "no" ]
   facts:
     description:
       - A dict of values to pass in as persistent external facter facts
@@ -70,6 +67,19 @@ options:
       - Puppet environment to be used.
     required: false
     default: None
+  logdest:
+    description:
+      - Where the puppet logs should go, if puppet apply is being used
+    required: false
+    default: stdout
+    choices: [ 'stdout', 'syslog' ]
+    version_added: "2.1"
+  certname:
+    description:
+      - The name to use when handling certificates.
+    required: false
+    default: None
+    version_added: "2.1"
 requirements: [ puppet ]
 author: "Monty Taylor (@emonty)"
 '''
@@ -83,6 +93,9 @@ EXAMPLES = '''
 
 # Run puppet using a different environment
 - puppet: environment=testing
+
+# Run puppet using a specific certname
+- puppet: certname=agent01.example.com
 '''
 
 
@@ -114,11 +127,16 @@ def main():
             timeout=dict(default="30m"),
             puppetmaster=dict(required=False, default=None),
             manifest=dict(required=False, default=None),
+            logdest=dict(
+                required=False, default='stdout',
+                choices=['stdout', 'syslog']),
             show_diff=dict(
+                # internal code to work with --diff, do not use
                 default=False, aliases=['show-diff'], type='bool'),
             facts=dict(default=None),
             facter_basename=dict(default='ansible'),
             environment=dict(required=False, default=None),
+            certname=dict(required=False, default=None),
         ),
         supports_check_mode=True,
         mutually_exclusive=[
@@ -128,7 +146,7 @@ def main():
     p = module.params
 
     global PUPPET_CMD
-    PUPPET_CMD = module.get_bin_path("puppet", False)
+    PUPPET_CMD = module.get_bin_path("puppet", False, ['/opt/puppetlabs/bin'])
 
     if not PUPPET_CMD:
         module.fail_json(
@@ -178,17 +196,23 @@ def main():
         if p['puppetmaster']:
             cmd += " --server %s" % pipes.quote(p['puppetmaster'])
         if p['show_diff']:
-            cmd += " --show-diff"
+            cmd += " --show_diff"
         if p['environment']:
             cmd += " --environment '%s'" % p['environment']
+        if p['certname']:
+            cmd += " --certname='%s'" % p['certname']
         if module.check_mode:
             cmd += " --noop"
         else:
             cmd += " --no-noop"
     else:
         cmd = "%s apply --detailed-exitcodes " % base_cmd
+        if p['logdest'] == 'syslog':
+            cmd += "--logdest syslog "
         if p['environment']:
             cmd += "--environment '%s' " % p['environment']
+        if p['certname']:
+            cmd += " --certname='%s'" % p['certname']
         if module.check_mode:
             cmd += "--noop "
         else:

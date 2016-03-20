@@ -62,6 +62,7 @@ options:
         opposite.
     required: false
     default: "True"
+    version_added: "2.1"
 requirements:
     - "python >= 2.6"
     - "libvirt-python"

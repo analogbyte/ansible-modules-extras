@@ -80,6 +80,19 @@ options:
     required: false
     default: None
     version_added: "2.1"
+  tags:
+    description:
+      - A comma-separated list of puppet tags to be used.
+    required: false
+    default: None
+    version_added: "2.1"
+  execute:
+    description:
+      - Execute a specific piece of Puppet code. It has no effect with
+        a puppetmaster.
+    required: false
+    default: None
+    version_added: "2.1"
 requirements: [ puppet ]
 author: "Monty Taylor (@emonty)"
 '''
@@ -96,6 +109,12 @@ EXAMPLES = '''
 
 # Run puppet using a specific certname
 - puppet: certname=agent01.example.com
+# Run puppet using a specific piece of Puppet code. Has no effect with a
+# puppetmaster.
+- puppet: execute='include ::mymodule'
+
+# Run puppet using a specific tags
+- puppet: tags=update,nginx
 '''
 
 
@@ -137,10 +156,13 @@ def main():
             facter_basename=dict(default='ansible'),
             environment=dict(required=False, default=None),
             certname=dict(required=False, default=None),
+            tags=dict(required=False, default=None, type='list'),
+            execute=dict(required=False, default=None),
         ),
         supports_check_mode=True,
         mutually_exclusive=[
             ('puppetmaster', 'manifest'),
+            ('puppetmaster', 'manifest', 'execute'),
         ],
     )
     p = module.params
@@ -189,8 +211,8 @@ def main():
 
     if not p['manifest']:
         cmd = ("%(base_cmd)s agent --onetime"
-               " --ignorecache --no-daemonize --no-usecacheonfailure"
-               " --no-splay --detailed-exitcodes --verbose") % dict(
+               " --ignorecache --no-daemonize --no-usecacheonfailure --no-splay"
+               " --detailed-exitcodes --verbose --color 0") % dict(
                    base_cmd=base_cmd,
                    )
         if p['puppetmaster']:
@@ -199,6 +221,8 @@ def main():
             cmd += " --show_diff"
         if p['environment']:
             cmd += " --environment '%s'" % p['environment']
+        if p['tags']:
+            cmd += " --tags '%s'" % ','.join(p['tags'])
         if p['certname']:
             cmd += " --certname='%s'" % p['certname']
         if module.check_mode:
@@ -213,6 +237,10 @@ def main():
             cmd += "--environment '%s' " % p['environment']
         if p['certname']:
             cmd += " --certname='%s'" % p['certname']
+        if p['execute']:
+            cmd += " --execute '%s'" % p['execute']
+        if p['tags']:
+            cmd += " --tags '%s'" % ','.join(p['tags'])
         if module.check_mode:
             cmd += "--noop "
         else:
@@ -222,7 +250,7 @@ def main():
 
     if rc == 0:
         # success
-        module.exit_json(rc=rc, changed=False, stdout=stdout)
+        module.exit_json(rc=rc, changed=False, stdout=stdout, stderr=stderr)
     elif rc == 1:
         # rc==1 could be because it's disabled
         # rc==1 could also mean there was a compilation failure

@@ -62,7 +62,7 @@ options:
         opposite.
     required: false
     default: "True"
-    version_added: "2.1"
+    version_added: "2.2"
 requirements:
     - "python >= 2.6"
     - "libvirt-python"
@@ -94,12 +94,12 @@ tasks:
 
 RETURN = '''
 # for list_vms command
-list_vms: 
+list_vms:
     description: The list of vms defined on the remote system
     type: dictionary
     returned: success
     sample: [
-        "build.example.org", 
+        "build.example.org",
         "dev.example.org"
     ]
 # for status command
